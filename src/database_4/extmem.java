@@ -83,7 +83,7 @@ public class extmem {
 		return 0;
 	}
 	
-	public Object readBlockFromDisk(int blk,int addr){
+	public Object readBlockFromDisk(int blk,String addr){
 		/**No.6
 		 * 将磁盘上地址为addr的磁盘块读入缓冲区buf。同时，缓冲区buf的I/O次数加1。
 		 *@param addr磁盘上地址
@@ -100,9 +100,9 @@ public class extmem {
 	    //int blk = (int) getNewBlockInBuffer();
 	    data[blk][blkSize] = BLOCK_UNAVAILABLE;//标记这个块不可以用了
 	    //把disk的东西读进缓存区	
-		String fileName = "src/disk/lineFind/"+String.valueOf(addr)+".txt";
+		//String fileName = "src/disk/lineFind/"+String.valueOf(addr)+".txt";
 	    try {
-			FileReader fr = new FileReader(fileName);
+			FileReader fr = new FileReader(addr);
 			BufferedReader bf = new BufferedReader(fr);
 			String str;
 			// 按行读取字符串
@@ -124,7 +124,7 @@ public class extmem {
 		return blk;
 	}
 	
-	public int writeBlockToDisk(int blkPtr, int addr) throws IOException {
+	public int writeBlockToDisk(int blkPtr, String addr) throws IOException {
 		/**No.7 
 		 * 将缓冲区buf内的块blk写入磁盘上地址为addr的磁盘块。同时，缓冲区buf的I/O次数加1。
 		 * @param blkPtr为buf块的位置
@@ -132,8 +132,9 @@ public class extmem {
 		 * @return 若写入成功，则返回0；否则，返回-1。
 		 */
 		//创建文件夹，写文件
-		String address = String.valueOf(addr);
-		File fout = new File("src/disk/lineFind/"+address+".txt");
+		//String address = String.valueOf(addr);
+		//System.out.printf("writeBlockToDisk buf的序号：%d\n",blkPtr);
+		File fout = new File(addr);
 		FileOutputStream fos;
 		try {
 			fos = new FileOutputStream(fout);
