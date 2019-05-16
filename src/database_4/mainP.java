@@ -39,8 +39,10 @@ public class mainP {
 		//NestLoopJoin();
 		
 		//TODO Sort-Merge-Join算法
-		SortMergeJoin();
+		//SortMergeJoin();
 		//TODO Hash-Join算法
+		HashJoin();
+		
 		
 		/*
 		System.out.println("-------------函数Main-----------------");
@@ -154,7 +156,7 @@ public class mainP {
 		 */
 		System.out.println("-------------函数LineSearch-----------------");
 		//Step1:先进行排序
-		sortData();
+		sortData(rTupleNumber,rTable);
 		/*
 		for(int i=0;i<rTupleNumber;i++) {
 			for(int j = 0;j<2;j++) {
@@ -231,19 +233,19 @@ public class mainP {
 		}
 	}
 	
-	static void sortData(){
+	static void sortData(int column,int a[][]){
 		/**
 		 *对二维数组的第一列，进行简单的选择排序 
 		 */
-		for(int i=0;i<rTupleNumber;i++) {
-			for(int j = 0;j<rTupleNumber;j++) {
-				if(rTable[i][0]>rTable[j][0]) {//第一个数字>第二个数字
-					int temp0=rTable[i][0];
-					rTable[i][0] = rTable[j][0];
-					rTable[j][0] = temp0;
-					int temp1=rTable[i][1];
-					rTable[i][1] = rTable[j][1];
-					rTable[j][1] = temp1;
+		for(int i=0;i<column;i++) {
+			for(int j = 0;j<column;j++) {
+				if(a[i][0]<a[j][0]) {//第一个数字>第二个数字 //从小到大
+					int temp0=a[i][0];
+					a[i][0] = a[j][0];
+					a[j][0] = temp0;
+					int temp1=a[i][1];
+					a[i][1] = a[j][1];
+					a[j][1] = temp1;
 				}
 			}
 		}
@@ -257,7 +259,7 @@ public class mainP {
 	
 	static void BinaryFind() throws IOException {
 		//Step1:先对数据进行排序
-		sortData();
+		sortData(rTupleNumber,rTable);
 		//Step2：对数据进行分块
 		for(int i = 0;i<rTupleNumber;i=i+7) {
 			//System.out.printf("新的一轮 i=%d\n",i);
@@ -620,6 +622,7 @@ public class mainP {
 		/**
 		 * 嵌套遍历查询
 		 */
+		ArrayList<Integer> sameValue = new ArrayList<>();
 		//Step1:先把R表和S表都写进磁盘里边
 		writeAllBufferToDisk(rTupleNumber,rTable,"src/disk/NestLoopJoin/R");
 		writeAllBufferToDisk(sTupleNumber,sTable,"src/disk/NestLoopJoin/S");
@@ -654,8 +657,9 @@ public class mainP {
 						int anotherValueC = ex.data[(int) bufferLineS][sj];
 						int anotherValueD = ex.data[(int) bufferLineS][sj+4];
 						//System.out.printf("S的值%d \n",anotherValue);
-						if(oneValueA==anotherValueC) {
-							System.out.printf("相同 R块号%d 地址[%d,%d] S块号%d 地址[%d,%d]\n",i,j,j+4,si,sj,sj+4);
+						if((oneValueA==anotherValueC) && !(sameValue.contains(oneValueA))) {
+							System.out.printf("%d相同 R块号%d 地址[%d,%d] S块号%d 地址[%d,%d]\n",oneValueA,i,j,j+4,si,sj,sj+4);
+							sameValue.add(oneValueA);
 							//找到相同的就写进去，先写R再写S
 							if(saveBlockCondition>55) {//这块buffer写满了
 								//把它写进磁盘
@@ -699,10 +703,92 @@ public class mainP {
 	
 	/**
 	 *因为事先拍好了序，如果当前块，大于查找值要求了，因为后边的更大，所以没有意义再去找
+	 * @throws IOException 
 	 */
-	static void SortMergeJoin() {
+	static void SortMergeJoin() throws IOException {
 		//Step1：排序
+		sortData(rTupleNumber,rTable);
+		sortData(sTupleNumber,sTable);
+		//Step2:先把R表和S表都写进磁盘里边
+		writeAllBufferToDisk(rTupleNumber,rTable,"src/disk/SortMergeJoin/R");
+		writeAllBufferToDisk(sTupleNumber,sTable,"src/disk/SortMergeJoin/S");
+		//Step3：copy前边嵌套查找的方法，但是不设置停止条件
+		System.out.printf("Step2 总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
 		
-		//Step2：copy前边嵌套查找的方法，但是不设置停止条件
+		Object bufferLineSave = ex.getNewBlockInBuffer();//存放结果
+		int saveBlockCondition = 0;
+		int resultOrder=-1;
+		String resultNameFront = "src/disk/SortMergeJoin/A_Result";
+		for(int i=0;i<rTupleNumber/7;i++) {//对r进行遍历
+			System.out.printf("-------------------新的一块-----------------\n");
+			//先把一块R放进来,写进缓冲
+			Object bufferLineR = ex.getNewBlockInBuffer();//取得一个缓冲空间
+			String rName = "src/disk/SortMergeJoin/R"+String.valueOf(i)+".txt";
+			ex.readBlockFromDisk((int)bufferLineR,rName);
+			//System.out.printf("放进R 剩余可用%d\n",ex.numFreeBlk);
+			//对缓冲中的这行数据进行遍历
+			int breakCondition=0;//需不需要停止
+			for(int si=0;(si<sTupleNumber/7 && breakCondition==0);si++) {//要放进那么多的S行数据 sTupleNumber/7
+				//又放进一个S的行
+				System.out.printf("S块号 %d\n",si);
+				Object bufferLineS = ex.getNewBlockInBuffer();//取得一个缓冲空间
+				//System.out.printf("buffer剩余可用%d 申请到缓冲区的行数%d\n",ex.numFreeBlk,(int)bufferLineS);
+				String sName = "src/disk/SortMergeJoin/S"+String.valueOf(si)+".txt";
+				ex.readBlockFromDisk((int)bufferLineS,sName);
+				for(int j = 0;j<56;j=j+8) {//j代表的是字节为位置
+					//ex.data[(int) bufferLine][j] 要跟下面这行的所有的字段比较
+					int oneValueA = ex.data[(int) bufferLineR][j];
+					int oneValueB = ex.data[(int) bufferLineR][j+4];
+					//System.out.printf("R的值%d \n",oneValueA);
+					for(int sj = 0;sj<56;sj=sj+8) {
+						int anotherValueC = ex.data[(int) bufferLineS][sj];
+						int anotherValueD = ex.data[(int) bufferLineS][sj+4];
+						//System.out.printf("S的值%d \n",anotherValue);
+						if(oneValueA==anotherValueC) {
+							System.out.printf("%d相同 R块号%d 地址[%d,%d] S块号%d 地址[%d,%d]\n",oneValueA,i,j,j+4,si,sj,sj+4);
+							breakCondition=1;
+							//找到相同的就写进去，先写R再写S
+							if(saveBlockCondition>55) {//这块buffer写满了
+								//把它写进磁盘
+								resultOrder++;
+								String resultName=resultNameFront+String.valueOf(resultOrder)+".txt";
+								ex.writeBlockToDisk((int)bufferLineSave,resultName);
+								//再申请一块新的
+								//System.out.printf("释放写的那行以后 剩余可用%d\n",ex.numFreeBlk);
+								bufferLineSave = ex.getNewBlockInBuffer();//存放结果
+								saveBlockCondition = 0;
+								//System.out.printf("再申请存放缓冲的行  剩余可用%d\n",ex.numFreeBlk);
+							}else {
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+										oneValueA;
+								saveBlockCondition +=4;//4
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+										oneValueB;
+								saveBlockCondition +=4;//8
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+												anotherValueC;
+								saveBlockCondition +=4;//12
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+												anotherValueD;
+								saveBlockCondition +=4;//16 下一个开始是16了
+							}
+						}
+					}					
+				}
+				//这一行遍历完了，释放掉
+				ex.freeBlockInBuffer((int)bufferLineS);	
+			}
+			//释放R
+			ex.freeBlockInBuffer((int)bufferLineR);	
+		}
+		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+	}
+	
+	static void HashJoin() {
+		
 	}
 }
