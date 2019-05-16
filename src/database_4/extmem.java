@@ -119,7 +119,8 @@ public class extmem {
 			return null;
 		}
 	    //更改一些信息
-	    numFreeBlk--;
+	    //error 会变成两倍的修改
+	    //numFreeBlk--;
 	    numIO++;
 		return blk;
 	}
@@ -157,6 +158,7 @@ public class extmem {
 		for(int i=0;i<bufSize;i++) {
 			data[blkPtr][i]=0;
 		}
+		
 		data[blkPtr][blkSize]= BLOCK_AVAILABLE;//64是是否可用的标志位
 	    numFreeBlk++;
 	    numIO++;

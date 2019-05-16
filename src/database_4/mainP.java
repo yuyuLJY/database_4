@@ -32,9 +32,15 @@ public class mainP {
 		
 		//应用搜索算法：二分搜索
 		//BinaryFind();
-		//TODO 投影
+		//投影
+		//selectColumn();
 		
-		//TODO 连接
+		//TODO Nest-Loop- Join算法
+		//NestLoopJoin();
+		
+		//TODO Sort-Merge-Join算法
+		SortMergeJoin();
+		//TODO Hash-Join算法
 		
 		/*
 		System.out.println("-------------函数Main-----------------");
@@ -443,12 +449,260 @@ public class mainP {
 		return 1;
 	}
 	
-	static void selectColumn() {
+	static void selectColumn() throws IOException {
 		/**
 		 * 功能：R上的A属性进行投影，并将结果存放在磁盘上
 		 */
+		//Step1:把数据全部写进磁盘里边
+		int diskOrder=-1;
+		for(int i=0;i<rTupleNumber;i=i+7) {//行
+			//System.out.printf("遍历第%d次\n",i);
+			Object lineNumber = ex.getNewBlockInBuffer();
+			if(lineNumber!=null) {//缓冲区没有满
+				int target = 0;//标记，赋值缓冲区到什么位置了
+				int line = (int) lineNumber;
+				//System.out.printf("申请到的列标：%d\n",line);
+				for(int j = i;j<i+7;j++){
+					ex.data[line][target]=ex.data[line][target+1]=
+					ex.data[line][target+2]=ex.data[line][target+3]=rTable[j][0];
+					ex.data[line][target+4]=ex.data[line][target+5]=
+					ex.data[line][target+6]=ex.data[line][target+7]=rTable[j][1];
+					target+=8;
+				}
+			}else {
+				//System.out.printf("缓冲空间用完了\n");
+				//把缓冲区的内容写进磁盘
+				for(int k=0;k<8;k++) {
+					diskOrder++;
+					String fileName = "src/disk/selectColunm/"+String.valueOf(diskOrder)+".txt";
+					ex.writeBlockToDisk(k,fileName);
+				}
+				i = i-7;
+			}
+		}
+		int bufferBlockNow = ex.numAllBlk-ex.numFreeBlk;
+		for(int k=0;k<bufferBlockNow;k++) {
+			diskOrder++;
+			String fileName = "src/disk/selectColunm/"+String.valueOf(diskOrder)+".txt";
+			ex.writeBlockToDisk(k,fileName);
+			ex.freeBlockInBuffer(k);
+		}
+		//打印查看效果
+		System.out.printf("-------------查看缓冲区------------\n");
+		int dataCopy[][]=ex.data;
+		for(int i = 0;i<8;i++) {
+			for(int j = 0;j<65;j++) {
+				System.out.printf(dataCopy[i][j]+" ");
+			}
+			System.out.printf("\n");
+		}
+		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
 		
+		//Step2:计算流出多少块来存放数据最合适
+		//两行就需要一行的输出缓冲：2行作为存放结果的缓冲，4行作为输入数据
+		String fileName;
+		int circleNum = (diskOrder+1)/4;
+		int sepecialResultOrder = 99;
+		for(int cirle = 0;cirle<circleNum;cirle++) {//要进行计次轮回
+			for(int i=cirle*4;i<(cirle+1)*4;i++) {//[0 1 2 3] [4 5 6 7]
+				Object bufferLine = ex.getNewBlockInBuffer();//取得一个缓冲空间
+				fileName = "src/disk/selectColunm/"+String.valueOf(i)+".txt";
+				ex.readBlockFromDisk((int)bufferLine,fileName);
+			}
+			System.out.printf("buffer状态：%d %d\n",ex.numAllBlk,ex.numFreeBlk);
+			System.out.printf("-------------存了四块以后的查看缓冲区------------\n");
+			for(int i = 0;i<8;i++) {
+				for(int j = 0;j<65;j++) {
+					System.out.printf(dataCopy[i][j]+" ");
+				}
+				System.out.printf("\n");
+			}
+			//对有数据的4行进行遍历
+			Object bufferLine = ex.getNewBlockInBuffer();//取得一个缓冲空间
+			int condition =0;
+			for(int i=0;i<4;i++) {//对buffer的行进行遍历
+				for(int j = 0;j<56;j=j+8) {//对某个blk进行遍历
+					ex.data[(int) bufferLine][condition] = ex.data[(int) bufferLine][condition+1]=
+							ex.data[(int) bufferLine][condition+2] = ex.data[(int) bufferLine][condition+3]=
+							ex.data[i][j];
+					condition+=4;
+				}
+				System.out.printf("condition %d\n",condition);
+				if(condition>55) {//需要重新申请空间了
+					//先把原来那块写进磁盘
+					System.out.printf("写buffer换掉 %d\n",i);
+					sepecialResultOrder++;
+					fileName = "src/disk/selectColunm/"+String.valueOf(sepecialResultOrder)+".txt";
+					ex.writeBlockToDisk((int)bufferLine,fileName);
+					//重新申请,多申请了一个
+					bufferLine = ex.getNewBlockInBuffer();//取得一个缓冲空间
+					condition =0;
+				}	
+			}
+			System.out.printf("-------------查看缓冲区------------\n");
+			for(int i = 0;i<8;i++) {
+				for(int j = 0;j<65;j++) {
+					System.out.printf(dataCopy[i][j]+" ");
+				}
+				System.out.printf("\n");
+			}
+			
+			//清空缓冲区
+			//TODO 有问题 上帝视角
+			//int nowBlock = ex.numAllBlk-ex.numFreeBlk;
+			//System.out.printf("需要清空：%d %d %d\n",ex.numAllBlk,ex.numFreeBlk,nowBlock);
+			for(int kkk = 0;kkk<5;kkk++) {
+				ex.freeBlockInBuffer(kkk); 
+			}
+			
+
+		}
+	}
+	
+	//专门给Join用的
+	/**
+	 *@param column行数
+	 *@param a 二维数组，使用哪个表
+	 *@param fileName 使用的文件的名字
+	 */
+	static void writeAllBufferToDisk(int colunm,int a[][],String frontFileName) throws IOException {
+		int diskOrder=-1;
+		//System.out.printf("函数%s 总块数 %d 剩余可用%d\n",frontFileName,ex.numAllBlk,ex.numFreeBlk);
+		for(int i=0;i<colunm;i=i+7) {//行
+			//System.out.printf("遍历第%d次\n",i);
+			//System.out.printf("总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
+			Object lineNumber = ex.getNewBlockInBuffer();
+			if(lineNumber!=null) {//缓冲区没有满
+				int target = 0;//标记，赋值缓冲区到什么位置了
+				int line = (int) lineNumber;
+				//System.out.printf("申请到的列标：%d\n",line);
+				for(int j = i;j<i+7;j++){
+					ex.data[line][target]=ex.data[line][target+1]=
+					ex.data[line][target+2]=ex.data[line][target+3]=a[j][0];
+					ex.data[line][target+4]=ex.data[line][target+5]=
+					ex.data[line][target+6]=ex.data[line][target+7]=a[j][1];
+					target+=8;
+				}
+			}else {
+				//System.out.printf("缓冲空间用完了\n");
+				//把缓冲区的内容写进磁盘
+				for(int k=0;k<8;k++) {
+					diskOrder++;
+					String fileName = frontFileName+String.valueOf(diskOrder)+".txt";
+					ex.writeBlockToDisk(k,fileName);
+				}
+				i = i-7;
+			}
+		}
+		//System.out.printf("总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
+		int bufferBlockNow = ex.numAllBlk-ex.numFreeBlk;
+		for(int k=0;k<bufferBlockNow;k++) {
+			diskOrder++;
+			String fileName = frontFileName+String.valueOf(diskOrder)+".txt";
+			ex.writeBlockToDisk(k,fileName);
+			//多余了!!!! 和writeBlockToDisk会导致两次freeblock++
+			//ex.freeBlockInBuffer(k);
+		}
+		//打印查看效果
+		System.out.printf("-------------查看缓冲区------------\n");
+		int dataCopy[][]=ex.data;
+		for(int i = 0;i<8;i++) {
+			for(int j = 0;j<65;j++) {
+				System.out.printf(dataCopy[i][j]+" ");
+			}
+			System.out.printf("\n");
+		}
+		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+	}
+	
+	
+	static void NestLoopJoin() throws IOException{
+		/**
+		 * 嵌套遍历查询
+		 */
+		//Step1:先把R表和S表都写进磁盘里边
+		writeAllBufferToDisk(rTupleNumber,rTable,"src/disk/NestLoopJoin/R");
+		writeAllBufferToDisk(sTupleNumber,sTable,"src/disk/NestLoopJoin/S");
+		//Step2:取出R表的一行，与所有S表比较。做R表的行数次，每次都比较相关的属性是否相同
+		//相同的就写进一块缓冲里边，记录下存储这些链接结果的缓冲的行号
+		System.out.printf("Step2 总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
 		
+		Object bufferLineSave = ex.getNewBlockInBuffer();//存放结果
+		int saveBlockCondition = 0;
+		int resultOrder=-1;
+		String resultNameFront = "src/disk/NestLoopJoin/A_Result";
+		for(int i=0;i<rTupleNumber/7;i++) {//对r进行遍历
+			System.out.printf("-------------------新的一块-----------------\n");
+			//先把一块R放进来,写进缓冲
+			Object bufferLineR = ex.getNewBlockInBuffer();//取得一个缓冲空间
+			String rName = "src/disk/NestLoopJoin/R"+String.valueOf(i)+".txt";
+			ex.readBlockFromDisk((int)bufferLineR,rName);
+			//System.out.printf("放进R 剩余可用%d\n",ex.numFreeBlk);
+			//对缓冲中的这行数据进行遍历
+			for(int si=0;si<sTupleNumber/7;si++) {//要放进那么多的S行数据 sTupleNumber/7
+				//又放进一个S的行
+				Object bufferLineS = ex.getNewBlockInBuffer();//取得一个缓冲空间
+				//System.out.printf("buffer剩余可用%d 申请到缓冲区的行数%d\n",ex.numFreeBlk,(int)bufferLineS);
+				String sName = "src/disk/NestLoopJoin/S"+String.valueOf(si)+".txt";
+				ex.readBlockFromDisk((int)bufferLineS,sName);
+				for(int j = 0;j<56;j=j+8) {//j代表的是字节为位置
+					//ex.data[(int) bufferLine][j] 要跟下面这行的所有的字段比较
+					int oneValueA = ex.data[(int) bufferLineR][j];
+					int oneValueB = ex.data[(int) bufferLineR][j+4];
+					//System.out.printf("R的值%d \n",oneValueA);
+					for(int sj = 0;sj<56;sj=sj+8) {
+						int anotherValueC = ex.data[(int) bufferLineS][sj];
+						int anotherValueD = ex.data[(int) bufferLineS][sj+4];
+						//System.out.printf("S的值%d \n",anotherValue);
+						if(oneValueA==anotherValueC) {
+							System.out.printf("相同 R块号%d 地址[%d,%d] S块号%d 地址[%d,%d]\n",i,j,j+4,si,sj,sj+4);
+							//找到相同的就写进去，先写R再写S
+							if(saveBlockCondition>55) {//这块buffer写满了
+								//把它写进磁盘
+								resultOrder++;
+								String resultName=resultNameFront+String.valueOf(resultOrder)+".txt";
+								ex.writeBlockToDisk((int)bufferLineSave,resultName);
+								//再申请一块新的
+								//System.out.printf("释放写的那行以后 剩余可用%d\n",ex.numFreeBlk);
+								bufferLineSave = ex.getNewBlockInBuffer();//存放结果
+								saveBlockCondition = 0;
+								//System.out.printf("再申请存放缓冲的行  剩余可用%d\n",ex.numFreeBlk);
+							}else {
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+										oneValueA;
+								saveBlockCondition +=4;//4
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+										oneValueB;
+								saveBlockCondition +=4;//8
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+												anotherValueC;
+								saveBlockCondition +=4;//12
+								ex.data[(int) bufferLineSave][saveBlockCondition]=ex.data[(int) bufferLineSave][saveBlockCondition+1]=
+										ex.data[(int) bufferLineSave][saveBlockCondition+2]=ex.data[(int) bufferLineSave][saveBlockCondition+3]=
+												anotherValueD;
+								saveBlockCondition +=4;//16 下一个开始是16了
+							}
+						}
+					}					
+				}
+				//这一行遍历完了，释放掉
+				ex.freeBlockInBuffer((int)bufferLineS);	
+			}
+			//释放R
+			ex.freeBlockInBuffer((int)bufferLineR);	
+		}
+		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+	}
+	
+	/**
+	 *因为事先拍好了序，如果当前块，大于查找值要求了，因为后边的更大，所以没有意义再去找
+	 */
+	static void SortMergeJoin() {
+		//Step1：排序
 		
+		//Step2：copy前边嵌套查找的方法，但是不设置停止条件
 	}
 }
