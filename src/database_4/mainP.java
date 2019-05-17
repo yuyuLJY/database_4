@@ -41,7 +41,7 @@ public class mainP {
 		//TODO Sort-Merge-Join算法
 		//SortMergeJoin();
 		//TODO Hash-Join算法
-		HashJoin();
+		//HashJoin();
 		
 		
 		/*
@@ -590,6 +590,7 @@ public class mainP {
 				//把缓冲区的内容写进磁盘
 				for(int k=0;k<8;k++) {
 					diskOrder++;
+					ex.data[k][64]=1;
 					String fileName = frontFileName+String.valueOf(diskOrder)+".txt";
 					ex.writeBlockToDisk(k,fileName);
 				}
@@ -614,7 +615,7 @@ public class mainP {
 			}
 			System.out.printf("\n");
 		}
-		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+		System.out.printf("IO次数：%d\n",ex.numIO);
 	}
 	
 	
@@ -622,40 +623,69 @@ public class mainP {
 		/**
 		 * 嵌套遍历查询
 		 */
-		ArrayList<Integer> sameValue = new ArrayList<>();
+		
 		//Step1:先把R表和S表都写进磁盘里边
 		writeAllBufferToDisk(rTupleNumber,rTable,"src/disk/NestLoopJoin/R");
 		writeAllBufferToDisk(sTupleNumber,sTable,"src/disk/NestLoopJoin/S");
 		//Step2:取出R表的一行，与所有S表比较。做R表的行数次，每次都比较相关的属性是否相同
 		//相同的就写进一块缓冲里边，记录下存储这些链接结果的缓冲的行号
 		System.out.printf("Step2 总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
-		
+
+		String resultNameFront = "src/disk/NestLoopJoin/A_Result";//写到什么地方
+		String rTableName = "src/disk/NestLoopJoin/R";
+		String sTableName = "src/disk/NestLoopJoin/S";
+		LinecompareTowTable(resultNameFront,rTableName,sTableName,rTupleNumber/7,sTupleNumber/7);
+		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+	}
+	
+	
+	/**
+	 *只是线性查找的一部分，在buffer里边比较两个表的元组的值
+	 *（因为后边的hashJoin要用到，所以单独弄成一个函数）
+	 *@param resultNameFront 把结果写到什么地方
+	 *@param rTableName R表的存放位置
+	 *@param sTableName S表的存放位置
+	 *@param rRow R表的行数
+	 *@param SRow S表的行数
+	 * @throws IOException 
+	 */
+	static void LinecompareTowTable(String resultNameFront,String rTableName,String sTableName,int rRow,int sRow) throws IOException{
+		System.out.printf("两个文件的地址%s %s\n",rTableName,sTableName);
+		ArrayList<Integer> sameValue = new ArrayList<>();
 		Object bufferLineSave = ex.getNewBlockInBuffer();//存放结果
 		int saveBlockCondition = 0;
 		int resultOrder=-1;
-		String resultNameFront = "src/disk/NestLoopJoin/A_Result";
-		for(int i=0;i<rTupleNumber/7;i++) {//对r进行遍历
-			System.out.printf("-------------------新的一块-----------------\n");
+		for(int i=0;i<rRow;i++) {//对r进行遍历
 			//先把一块R放进来,写进缓冲
 			Object bufferLineR = ex.getNewBlockInBuffer();//取得一个缓冲空间
-			String rName = "src/disk/NestLoopJoin/R"+String.valueOf(i)+".txt";
+			String rName = rTableName+String.valueOf(i)+".txt";
 			ex.readBlockFromDisk((int)bufferLineR,rName);
 			//System.out.printf("放进R 剩余可用%d\n",ex.numFreeBlk);
 			//对缓冲中的这行数据进行遍历
-			for(int si=0;si<sTupleNumber/7;si++) {//要放进那么多的S行数据 sTupleNumber/7
+			for(int si=0;si<sRow;si++) {//要放进那么多的S行数据 sTupleNumber/7
 				//又放进一个S的行
 				Object bufferLineS = ex.getNewBlockInBuffer();//取得一个缓冲空间
 				//System.out.printf("buffer剩余可用%d 申请到缓冲区的行数%d\n",ex.numFreeBlk,(int)bufferLineS);
-				String sName = "src/disk/NestLoopJoin/S"+String.valueOf(si)+".txt";
+				String sName = sTableName+String.valueOf(si)+".txt";
 				ex.readBlockFromDisk((int)bufferLineS,sName);
+				/*
+				System.out.printf("-------------查看缓冲区------------\n");
+				for(int xx = 0;xx<8;xx++) {
+					for(int yy = 0;yy<65;yy++) {
+						System.out.printf(ex.data[xx][yy]+" ");
+					}
+					System.out.printf("\n");
+				}*/
 				for(int j = 0;j<56;j=j+8) {//j代表的是字节为位置
 					//ex.data[(int) bufferLine][j] 要跟下面这行的所有的字段比较
 					int oneValueA = ex.data[(int) bufferLineR][j];
+					//System.out.printf("A取得的buffer行号 A的值:%d %d\n",(int) bufferLineR,oneValueA);
 					int oneValueB = ex.data[(int) bufferLineR][j+4];
 					//System.out.printf("R的值%d \n",oneValueA);
 					for(int sj = 0;sj<56;sj=sj+8) {
 						int anotherValueC = ex.data[(int) bufferLineS][sj];
 						int anotherValueD = ex.data[(int) bufferLineS][sj+4];
+						//System.out.printf("C的值:%d\n",anotherValueC);
 						//System.out.printf("S的值%d \n",anotherValue);
 						if((oneValueA==anotherValueC) && !(sameValue.contains(oneValueA))) {
 							System.out.printf("%d相同 R块号%d 地址[%d,%d] S块号%d 地址[%d,%d]\n",oneValueA,i,j,j+4,si,sj,sj+4);
@@ -698,8 +728,8 @@ public class mainP {
 			//释放R
 			ex.freeBlockInBuffer((int)bufferLineR);	
 		}
-		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
 	}
+	
 	
 	/**
 	 *因为事先拍好了序，如果当前块，大于查找值要求了，因为后边的更大，所以没有意义再去找
@@ -788,7 +818,132 @@ public class mainP {
 		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
 	}
 	
-	static void HashJoin() {
+	static void HashJoin() throws IOException {
+		//Step1:把数据块放进硬盘
+		writeAllBufferToDisk(rTupleNumber,rTable,"src/disk/HashJoin/R/");
+		writeAllBufferToDisk(sTupleNumber,sTable,"src/disk/HashJoin/S/");
+		System.out.printf("Step1 总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
+		//step2:R和S都的数据都分成两部分：奇数和偶数
+		//遍历R数组，如果直接用内存排好奇偶的块放在目录里
+		int rFileNameOrder[] = divideBucket(rTupleNumber,"R");
+		int sFileNameOrder[] =divideBucket(sTupleNumber,"S");
+		System.out.printf("Step2 总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
+		//Step3:去目录里边，取出hash好的块，剩下的就是线性join
 		
+		//改一下线性查找
+		//奇数比较
+		String oddResultNameFront = "src/disk/HashJoin/Result/";//写到什么地方
+		String evenResultNameFront = "src/disk/HashJoin/Result/";//写到什么地方
+		LinecompareTowTable(oddResultNameFront,"src/disk/HashJoin/R/O","src/disk/HashJoin/S/O",rFileNameOrder[1],sFileNameOrder[1]);
+		LinecompareTowTable(evenResultNameFront,"src/disk/HashJoin/R/E","src/disk/HashJoin/S/E",rFileNameOrder[0],sFileNameOrder[0]);
+		System.out.printf("HashJoin IO次数：%d\n",ex.numIO);
+		
+	}
+	
+	//划分桶
+	/**
+	 *@param :TupleNumber 表的行数
+	 *@param tableType: S or R
+	 * @throws IOException 
+	 */
+	static int[] divideBucket(int TupleNumber,String tableType) throws IOException {
+		String bucket;//桶的名字
+		int Ocondition=0;
+		int Econdition=0;
+		int oodOrder=-1;
+		int evenOrder=-1;
+		int fileNameOrder[] = {0,0};
+		String oddFrontName = "src/disk/HashJoin/"+tableType+"/O";
+		String evenFrontName = "src/disk/HashJoin/"+tableType+"/E";
+		String diskName = "src/disk/HashJoin/"+tableType+"/";
+		for(int i=0;i<TupleNumber/7;i++) {//有多少块
+			//读进一个块
+			//System.out.printf("divideBucket 总块数 %d 剩余可用%d\n",ex.numAllBlk,ex.numFreeBlk);
+			Object bufferLine = ex.getNewBlockInBuffer();
+			String rName = diskName+String.valueOf(i)+".txt";
+			ex.readBlockFromDisk((int)bufferLine,rName);
+			for(int j = 0;j<56;j=j+8) {//对块里边的元组的 属性进行遍历
+				bucket = judgeOddEven(ex.data[(int) bufferLine][j]);//判断的数据
+				if(bucket.equals("O")) {//奇数，使用第No6个桶
+					//把数据写进特定的栏
+					if(Ocondition>55) {//Ocondition=56
+						//把里边的数据写进磁盘
+						oodOrder++;
+						ex.data[6][64]=1;
+						String resultName=oddFrontName+String.valueOf(oodOrder)+".txt";
+						ex.writeBlockToDisk(6,resultName);
+						ex.numFreeBlk--;
+						Ocondition=0;
+						//再申请一块新的
+						//System.out.printf("释放写的那行以后 剩余可用%d\n",ex.numFreeBlk);
+					}
+					ex.data[6][Ocondition]=ex.data[6][ Ocondition+1]=
+							ex.data[6][ Ocondition+2]=ex.data[6][ Ocondition+3]=
+							ex.data[(int) bufferLine][j];
+					Ocondition+=4;//4
+					ex.data[6][Ocondition]=ex.data[6][ Ocondition+1]=
+							ex.data[6][ Ocondition+2]=ex.data[6][ Ocondition+3]=
+							ex.data[(int) bufferLine][j+4];
+					Ocondition+=4;//4
+				}else {//偶数使用第No7个桶
+					//把数据写进特定的栏
+					if(Econdition>55) {//Ocondition=56
+						//把里边的数据写进磁盘
+						evenOrder++;
+						ex.data[7][64]=1;
+						String resultName=evenFrontName+String.valueOf(evenOrder)+".txt";
+						ex.writeBlockToDisk(7,resultName);
+						ex.numFreeBlk--;
+						Econdition=0;
+						//System.out.printf("释放写的那行以后 剩余可用%d\n",ex.numFreeBlk);
+					}
+					ex.data[7][Econdition]=ex.data[7][Econdition+1]=
+							ex.data[7][Econdition+2]=ex.data[7][Econdition+3]=
+							ex.data[(int) bufferLine][j];
+					Econdition+=4;//4
+					ex.data[7][Econdition]=ex.data[7][Econdition+1]=
+							ex.data[7][Econdition+2]=ex.data[7][Econdition+3]=
+							ex.data[(int) bufferLine][j+4];
+					Econdition+=4;//4
+				}
+			}
+			//把这个buffer释放
+			//释放R
+			ex.freeBlockInBuffer((int)bufferLine);	
+		}
+		//把6和7的数据再写进磁盘
+		/*
+		System.out.printf("-------------查看缓冲区------------\n");
+		for(int i = 0;i<8;i++) {
+			for(int j = 0;j<65;j++) {
+				System.out.printf(ex.data[i][j]+" ");
+			}
+			System.out.printf("\n");
+		}*/
+		
+		if(ex.data[7][64]==1) {
+			evenOrder++;
+			String resultName=evenFrontName+String.valueOf(evenOrder)+".txt";
+			ex.writeBlockToDisk(7,resultName);
+			ex.numFreeBlk--;
+		}else {
+			oodOrder++;
+			String resultName=oddFrontName+String.valueOf(oodOrder)+".txt";
+			ex.writeBlockToDisk(6,resultName);
+			ex.numFreeBlk--;
+		}
+		
+		fileNameOrder[0] = evenOrder;
+		fileNameOrder[1] = oodOrder;
+		return fileNameOrder;
+	}
+	
+	//判断元组的属性值是奇数还是偶数 odd even
+	static String judgeOddEven(int val){
+		if(val%2==1) {
+			return "O";
+		}else {
+			return "E";
+		}
 	}
 }
