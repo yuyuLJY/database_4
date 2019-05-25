@@ -1,16 +1,36 @@
 package database_4;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Stack;
+
 public class Btree<Key extends Comparable<Key>, Value> 
 {
   // max children per B-tree node = M-1
   // (must be even and greater than 2)
-  private static final int M = 5;//结点最多可以存3个数据
+	static ArrayList<ArrayList<String>> indexList = new ArrayList<>();// 存放所有state
+	static int diskNo = -1;
+	static int parentNo = 0;
+	//static Map<Integer, String> index = new HashMap<>();
+	//static Stack<Integer> parentStack = new Stack<Integer>();
+	
+  private static final int M = 8;//结点最多可以存3个数据
  
   private Node root;    // root of the B-tree
   private int height;   // height of the B-tree
   private int n;      // number of key-value pairs in the B-tree
  
   // helper B-tree node data type
+  //TODO m要来干什么？？
   private static final class Node 
   {
     private int m;               // number of children
@@ -23,6 +43,7 @@ public class Btree<Key extends Comparable<Key>, Value>
     }
   }
  
+  //有两类结点，分成内部结点和外部结点
   // internal nodes: only use key and next
   // external nodes: only use key and value
   private static class Entry 
@@ -98,7 +119,7 @@ public class Btree<Key extends Comparable<Key>, Value>
 	  //TODO 
     Entry[] children = x.children;
     for(int i=0;i<x.m;i++) {
-    	System.out.println("key value next:"+x.m+" "+children[i].key+" "+children[i].val+" "+children[i].next);
+    	//System.out.println("key value next:"+x.m+" "+children[i].key+" "+children[i].val+" "+children[i].next);
     }
  
     // external node到最底层叶子结点，遍历
@@ -106,10 +127,10 @@ public class Btree<Key extends Comparable<Key>, Value>
     {
       for (int j = 0; j < x.m; j++)       
       {
-    	  System.out.println("高度"+ht+" 值："+children[j].key);
+    	  //System.out.println("高度"+ht+" 值："+children[j].key);
         if (eq(key, children[j].key)) 
         {
-        	System.out.printf("找到了\n");	
+        	//System.out.printf("找到了\n");	
           return (Value) children[j].val;
         }
       }
@@ -120,10 +141,10 @@ public class Btree<Key extends Comparable<Key>, Value>
     {	//System.out.printf("孩子的个数%d\n",x.m);
       for (int j = 0; j < x.m; j++) 
       {
-    	  System.out.printf("高度 %d 判断1：%d %d\n",ht,j+1,x.m);
+    	  //System.out.printf("高度 %d 判断1：%d %d\n",ht,j+1,x.m);
     	  //System.out.println("高度 "+ht+" 判断2："+key+" "+children[j+1].key+" "+less(key, children[j+1].key));
         if (j+1 == x.m || less(key, children[j+1].key)){//已经把孩子遍历完了 or 
-        	System.out.println("执行return");
+        	//System.out.println("执行return");
           return search(children[j].next, key, ht-1);
         }
       }
@@ -233,35 +254,135 @@ public class Btree<Key extends Comparable<Key>, Value>
    */
   public String toString() 
   {
-    return toString(root, height, "") + "\n";
+    try {
+		return toString(root, height, "") + "\n";
+	} catch (IOException e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	}
+	return null;
   }
  
-  private String toString(Node h, int ht, String indent) 
+  private String toString(Node h, int ht, String indent) throws IOException 
   {
     StringBuilder s = new StringBuilder();
     Entry[] children = h.children;
  
-    if (ht == 0) 
-    {
+    if (ht == 0) {//叶子结点，没有括号
+    	
+    	ArrayList<String> oneList = new ArrayList<>();
+    	ArrayList<String> copyDataList = new ArrayList<>();
+    	diskNo++;
+        //int parent = parentStack.get(parentStack.size()-1);//
+        //System.out.println("叶子结点-父亲是："+parent);
+        //String smallIndex = index.get(parent);
+        //int addNewIndex = diskNo;
+        //index.put(parent,smallIndex+String.valueOf(addNewIndex));       
       for (int j = 0; j < h.m; j++) 
       {
+    	//h.m 叶子结点有多少个量
         s.append(indent + children[j].key + " " + children[j].val + "\n");
+        oneList.add(String.valueOf(children[j].key));
+        copyDataList.add(String.valueOf(children[j].key));
+        copyDataList.add(String.valueOf(children[j].val));
       }
+      treeBlockWriteTodisk(0,copyDataList,indexList.size());//把数据写进磁盘
+      indexList.add(oneList);
     }
-    else
-    {
+    else{//中间结点，有括号
+     //重新申请一个list
+    	//TODO 
+       
+       ArrayList<String> oneList = new ArrayList<>();
+       diskNo++;//这个新申请的块的块号
+       //index.put(diskNo, "");
+       //parentStack.push(diskNo);
+       System.out.println("有几个儿子："+h.m+"第几层 :"+indexList.size());
+       for(int j = 1; j < h.m; j++) {//先把自己的这一层弄清楚
+    	   oneList.add(String.valueOf(children[j].key));
+       }
+       //
+       treeBlockWriteTodisk(1,oneList,indexList.size());
+       indexList.add(oneList);
+       /*
+       //完成填写index
+       if(diskNo!=0) {
+       int parent = parentStack.get(parentStack.size()-2);//从顶开始数的第二个
+       System.out.println("非叶子节点-父亲是："+parent);
+       String smallIndex = index.get(parent);
+       int addNewIndex = parentStack.get(parentStack.size()-1);
+       System.out.println("非叶子节点-当前节点是："+addNewIndex);
+       index.put(parent,smallIndex+String.valueOf(addNewIndex));
+       }*/
       for (int j = 0; j < h.m; j++) 
       {
         if (j > 0) 
         {
           s.append(indent + "(" + children[j].key + ")\n");
         }
+        //System.out.println("---"+children[j].key);
         s.append(toString(children[j].next, ht-1, indent + "   "));
+        //返回了上一级
+        //parentStack.pop();
       }
+      
     }
     return s.toString();
   }
  
+  //把文件写进磁盘
+  static void treeBlockWriteTodisk(int choice,ArrayList<String> List,int order) throws IOException{
+	  File fout = new File("src/disk/BTreeFind1/"+String.valueOf(order)+".txt");
+	  if(choice==0) {//叶子结点
+			FileOutputStream fos;
+			try {
+				fos = new FileOutputStream(fout);
+				BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fos));
+				 
+				//0 表示的是元组 1 表示的是后继的地址
+				//0 12 34
+				for (int i = 0; i <List.size(); i++) {
+					for(int j=0;j<4;j++) {
+						String s = String.valueOf(List.get(i));
+						bw.write(s);
+						bw.newLine();
+					}
+				}
+				for(int k=List.size()*4;k<65;k++) {
+					String s = "0";
+					bw.write(s);
+					bw.newLine();
+				}
+				bw.close();
+			} catch (FileNotFoundException e) {
+				System.out.println("Writing Block Failed!\n");
+				e.printStackTrace();
+			}
+	  }else {//非叶子结点
+			FileOutputStream fos;
+			try {
+				fos = new FileOutputStream(fout);
+				BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fos));
+				 
+				//0 表示的是元组 1 表示的是后继的地址
+				//0 12 34
+				for (int i = 0; i <List.size(); i++) {
+					String s = String.valueOf(List.get(i));
+					bw.write(s);
+					bw.newLine();
+				}
+				for(int k=List.size();k<65;k++) {
+					String s = "0";
+					bw.write(s);
+					bw.newLine();
+				}
+				bw.close();
+			} catch (FileNotFoundException e) {
+				System.out.println("Writing Block Failed!\n");
+				e.printStackTrace();
+			}
+	  }
+  }
  
   // comparison functions - make Comparable instead of Key to avoid casts
   private boolean less(Comparable k1, Comparable k2) 
@@ -282,55 +403,47 @@ public class Btree<Key extends Comparable<Key>, Value>
    */
   public static void main(String[] args) 
   {
-    Btree<String, String> st = new Btree<String, String>();
     
-    /*
-    st.put("www.cs.princeton.edu", "128.112.136.12");
-    st.put("www.cs.princeton.edu", "128.112.136.11");
-    st.put("www.princeton.edu",  "128.112.128.15");
-    st.put("www.yale.edu",     "130.132.143.21");
-    st.put("www.simpsons.com",   "209.052.165.60");
-    st.put("www.apple.com",    "17.112.152.32");
-    st.put("www.amazon.com",    "207.171.182.16");
-    st.put("www.ebay.com",     "66.135.192.87");
-    st.put("www.cnn.com",     "64.236.16.20");
-    st.put("www.google.com",    "216.239.41.99");
-    st.put("www.nytimes.com",   "199.239.136.200");
-    st.put("www.microsoft.com",  "207.126.99.140");
-    st.put("www.dell.com",     "143.166.224.230");
-    st.put("www.slashdot.org",   "66.35.250.151");
-    st.put("www.espn.com",     "199.181.135.201");
-    st.put("www.weather.com",   "63.111.66.11");
-    st.put("www.yahoo.com",    "216.109.118.65");
- 	*/
-    
-    //C N G A H E K Q M F W L T Z D P R X Y S
-    st.put("C","C");
-    st.put("N","N");
-    st.put("G","G");
-    st.put("A","A");
-    st.put("H","H");
-    st.put("E","E");
-    st.put("K","K");
-    st.put("Q","Q");
-    st.put("M","M");
-    st.put("F","F");
-    
-    /*
-    System.out.println("cs.princeton.edu: " + st.get("www.cs.princeton.edu"));
-    System.out.println("hardvardsucks.com: " + st.get("www.harvardsucks.com"));
-    System.out.println("simpsons.com:   " + st.get("www.simpsons.com"));
-    System.out.println("apple.com:     " + st.get("www.apple.com"));
-    System.out.println("ebay.com:     " + st.get("www.ebay.com"));
-    */
-    //System.out.println("dell.com:     " + st.get("www.dell.com"));
-    //System.out.println(st.get("20"));
-    System.out.println();
- 
-    System.out.println("size:  " + st.size());
-    System.out.println("height: " + st.height());
+	Btree<Integer, Integer> st = new Btree<Integer, Integer>();
+    //插入数据，从文件中读取R表的第一行(即A的值)
+	int valueA;
+	String fileName = "src/table/Rtable.txt";
+	try {
+		FileReader fr = new FileReader(fileName);
+		BufferedReader bf = new BufferedReader(fr);
+		String str;
+		// 按行读取字符串
+		int i = 0;
+		while ((str = bf.readLine()) != null) {
+			String s[] = str.split(" ");
+			//valueA = Integer.valueOf(s[0]);
+			st.put(Integer.valueOf(s[0]),Integer.valueOf(s[1]));
+		}
+		bf.close();
+		fr.close();
+	} catch (IOException e) {
+		e.printStackTrace();
+	}
+  
     System.out.println(st);
+    
+    System.out.println("indexList长度Main"+indexList.size());
+    for(int i =0;i<indexList.size();i++) {
+    	System.out.println("......"+i+"......");
+    	ArrayList<String> oneList = indexList.get(i);
+    	for(String s :oneList) {
+    		System.out.println(s);
+    	}
+    	System.out.println("............");
+    	System.out.println();
+    }
+    /*
+    System.out.println("-------------------------index------------------------");
+    for(Integer key :index.keySet()) {
+    	System.out.println("key:"+key+" value: "+index.get(key));
+    }
     System.out.println();
+    */
   }
 }
 

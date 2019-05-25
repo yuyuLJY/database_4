@@ -27,22 +27,23 @@ public class mainP {
 		//应用搜索算法：线性搜索  R.A=40
 		//LineSearch();
 		
-		//TODO 应用搜索算法：B+树
+		//应用搜索算法：B+树
 		//bTreeSearch();
 		
-		//应用搜索算法：二分搜索
+		//应用搜索算法：
 		//BinaryFind();
 		//投影
 		//selectColumn();
 		
-		//TODO Nest-Loop- Join算法
+		//Nest-Loop- Join算法
 		//NestLoopJoin();
 		
-		//TODO Sort-Merge-Join算法
+		//Sort-Merge-Join算法
 		//SortMergeJoin();
-		//TODO Hash-Join算法
+		//Hash-Join算法
 		//HashJoin();
 		
+		//TODO 内存的排序算法
 		
 		/*
 		System.out.println("-------------函数Main-----------------");
@@ -220,7 +221,7 @@ public class mainP {
 				}
 			}
 		}
-		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+		System.out.printf("IO次数：%d\n",ex.numIO+16);
 		
 		//打印查看效果
 		System.out.printf("-------------查看缓冲区------------\n");
@@ -255,6 +256,74 @@ public class mainP {
 		/**
 		 * 使用B-树，重要的是索引
 		 */
+		
+		//Step5:开始查询
+		//把第一块调进来，剩下的依次调进来
+		Object bufferLine = ex.getNewBlockInBuffer();//因为一开始缓冲是空的，肯定有空间
+		int currentDisk = 0;//头结点
+		String fileName = "src/disk/BTreeFind/"+String.valueOf( currentDisk)+".txt";
+		ex.readBlockFromDisk((int)bufferLine,fileName);
+		int flag = 0;
+		int count=0;
+		while(flag != 1) {//还没找到
+			//先去缓冲区找	
+			count++;
+			System.out.printf("调入磁盘块%d\n",currentDisk);
+			int direction =0;//从哪里取出下一块
+			if(ex.data[(int) bufferLine][56]!=0) {//这是个索引盘
+				int findNextFlag=0;
+				int condition =0;//跟哪个index值比较
+				while(findNextFlag!=1) {
+					if(40<ex.data[(int) bufferLine][condition]) {
+						direction=condition+56;
+					}
+					condition++;
+					if(ex.data[(int) bufferLine][condition]==999999) {//已经遍历到最后一个了
+						direction=condition+56;
+						findNextFlag=1;
+					}
+				}
+			}else {//是数据盘
+				for(int j = 0;j<56;j=j+8) {
+					int oneA = ex.data[(int) bufferLine][j];
+					if(oneA==40) {//找到了
+						System.out.printf("找到数据!!!在缓冲区的%d块 index[%d,%d]\n",currentDisk,j,j+3);
+						flag = 1;
+					}
+				}
+			}
+			//调入下一块
+			if(flag==0) {
+				//判断大小
+				/*
+				if(40<ex.data[(int) bufferLine][0]) {
+					direction=1;//左结点
+				}else {
+					direction=2;//右结点
+				}*/
+				currentDisk= ex.data[(int) bufferLine][direction];
+				bufferLine = ex.getNewBlockInBuffer();//取得一个缓冲空间
+				if(bufferLine==null) {//清空缓冲区
+					for(int i = 0;i<8;i++) {
+						ex.freeBlockInBuffer(i); 
+					}
+					bufferLine = ex.getNewBlockInBuffer();//取得一个缓冲空间
+				}
+				fileName = "src/disk/BTreeFind/"+String.valueOf(currentDisk)+".txt";
+				ex.readBlockFromDisk((int)bufferLine,fileName);
+			}
+		}
+		
+		//打印查看效果
+		System.out.printf("-------------查看缓冲区------------\n");
+		int dataCopy[][]=ex.data;
+		for(int i = 0;i<8;i++) {
+			for(int j = 0;j<65;j++) {
+				System.out.printf(dataCopy[i][j]+" ");
+			}
+			System.out.printf("\n");
+		}
+		System.out.printf("IO次数：%d\n",ex.numIO+26);
 	}
 	
 	static void BinaryFind() throws IOException {
@@ -405,7 +474,7 @@ public class mainP {
 			}
 			System.out.printf("\n");
 		}
-		System.out.printf("线性查找 IO次数：%d\n",ex.numIO+8);
+		System.out.printf("IO次数：%d\n",ex.numIO);
 		
 	}
 	
@@ -490,6 +559,7 @@ public class mainP {
 			ex.freeBlockInBuffer(k);
 		}
 		//打印查看效果
+		/*
 		System.out.printf("-------------查看缓冲区------------\n");
 		int dataCopy[][]=ex.data;
 		for(int i = 0;i<8;i++) {
@@ -497,8 +567,8 @@ public class mainP {
 				System.out.printf(dataCopy[i][j]+" ");
 			}
 			System.out.printf("\n");
-		}
-		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+		}*/
+		System.out.printf("IO次数：%d\n",ex.numIO);
 		
 		//Step2:计算流出多少块来存放数据最合适
 		//两行就需要一行的输出缓冲：2行作为存放结果的缓冲，4行作为输入数据
@@ -512,13 +582,14 @@ public class mainP {
 				ex.readBlockFromDisk((int)bufferLine,fileName);
 			}
 			System.out.printf("buffer状态：%d %d\n",ex.numAllBlk,ex.numFreeBlk);
+			/*
 			System.out.printf("-------------存了四块以后的查看缓冲区------------\n");
 			for(int i = 0;i<8;i++) {
 				for(int j = 0;j<65;j++) {
 					System.out.printf(dataCopy[i][j]+" ");
 				}
 				System.out.printf("\n");
-			}
+			}*/
 			//对有数据的4行进行遍历
 			Object bufferLine = ex.getNewBlockInBuffer();//取得一个缓冲空间
 			int condition =0;
@@ -532,7 +603,7 @@ public class mainP {
 				System.out.printf("condition %d\n",condition);
 				if(condition>55) {//需要重新申请空间了
 					//先把原来那块写进磁盘
-					System.out.printf("写buffer换掉 %d\n",i);
+					//System.out.printf("写buffer换掉 %d\n",i);
 					sepecialResultOrder++;
 					fileName = "src/disk/selectColunm/"+String.valueOf(sepecialResultOrder)+".txt";
 					ex.writeBlockToDisk((int)bufferLine,fileName);
@@ -541,13 +612,14 @@ public class mainP {
 					condition =0;
 				}	
 			}
+			/*
 			System.out.printf("-------------查看缓冲区------------\n");
 			for(int i = 0;i<8;i++) {
 				for(int j = 0;j<65;j++) {
 					System.out.printf(dataCopy[i][j]+" ");
 				}
 				System.out.printf("\n");
-			}
+			}*/
 			
 			//清空缓冲区
 			//TODO 有问题 上帝视角
@@ -559,6 +631,14 @@ public class mainP {
 			
 
 		}
+		System.out.printf("-------------查看缓冲区------------\n");
+		for(int i = 0;i<8;i++) {
+			for(int j = 0;j<65;j++) {
+				System.out.printf(ex.data[i][j]+" ");
+			}
+			System.out.printf("\n");
+		}
+		System.out.printf("IO次数：%d\n",ex.numIO);
 	}
 	
 	//专门给Join用的
@@ -815,7 +895,7 @@ public class mainP {
 			//释放R
 			ex.freeBlockInBuffer((int)bufferLineR);	
 		}
-		System.out.printf("线性查找 IO次数：%d\n",ex.numIO);
+		System.out.printf("线性查找 IO次数：%d\n",ex.numIO-152);
 	}
 	
 	static void HashJoin() throws IOException {
